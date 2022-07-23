@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import copy
+import sys
 
 class bcolors:
     BLACK = '\033[30m'
@@ -28,13 +29,14 @@ class galaxy_field:
         self.board = []
     else:
         self.board = copy.deepcopy(board)
-    self.difficulty = None
+    self.difficulty = 0
     self.nsolutions = None
     for i in range(n):
       self.board.append([])
       for j in range(n):
         self.board[i].append(None)
     self.sanity_check()
+    self.unsolvable = False
 
   def sanity_check(self):
     self.centers_sanity_check()
@@ -46,17 +48,38 @@ class galaxy_field:
       if not self.is_on_board(cx,cy):
         raise ValueError(f'Gravity center is out of the board: {cx},{cy} (board_size={self.board_size})')
 
-  def solve(self):
-    self.solve_phase_1() or self.solve_phase_2()
+  def solve(self, level=999):
+
+    if level == 0: return self.is_solved()
+
+    self.solve_phase_1()
 
     if self.is_solved(): return True
+    if self.unsolvable: return False
+    if level == 1: return self.is_solved()
+
+    self.solve_phase_2()
+    if self.is_solved(): return True
+    if self.unsolvable: return False
+    if level == 2: return self.is_solved()
 
     while self.solve_phase_3():
         self.solve_phase_2()
+        if self.unsolvable: return False
 
     if self.is_solved(): return True
+    if self.unsolvable: return False
+    if level == 3: return self.is_solved()
 
-    self.solve_phase_3(try_hard=True)
+#    self.solve_phase_3(try_hard=True)
+
+    if self.is_solved(): return True
+    if self.unsolvable: return False
+
+    self.solve_phase_4()
+
+    if self.is_solved(): return True
+    else:                return False
 
 
   def solve_phase_1(self):
@@ -80,10 +103,7 @@ class galaxy_field:
         for j in range(self.board_size):
           if self.board[i][j] != None:
             continue
-          reachable = self.get_reachable_centers(j,i)
-          possible = self.get_possible_centers(j,i)
-          reachable_and_possible = reachable & possible
-          #print(f'x={j=}  y={i=}  {reachable_and_possible=}  {reachable=}  {possible=}')
+          reachable_and_possible = self.get_reachable_and_possible_centers(j,i)
           if len(reachable_and_possible) == 1:
             c = reachable_and_possible.pop()
             self.mark_point_and_mirror_point(j,i, c)
@@ -91,7 +111,7 @@ class galaxy_field:
             any_change = True
     return any_change
 
-  def solve_phase_3(self,try_hard=False):
+  def solve_phase_3(self, try_hard=False):
     # connect separated parts of a galaxy (if there is any)
     change = True
     any_change = False
@@ -105,10 +125,63 @@ class galaxy_field:
             if self.try_to_connect_galaxy(j,i,self.board[i][j], try_hard=try_hard):
               change = True
               any_change = True
+            if try_hard and not self.is_connected_galaxy(j,i,self.board[i][j]):
+              self.unsolvable = True
     return any_change
 
   def solve_phase_4(self):
-    pass
+    # backtrack with recursive calls
+    x, y, reachable_and_possible = self.get_least_possibilities_position()
+    #print(f'solve_phase_4: {x, y, reachable_and_possible = }')
+    if not bool(reachable_and_possible): # empty set
+        self.unsolvable = True
+        return
+
+    self.difficulty += 1000000
+    possible_solutions = set()
+    for c in reachable_and_possible:
+      bb = galaxy_field(self.board_size, self.centers, self.board)
+      bb.mark_point_and_mirror_point(x,y,c)
+      if not bb.is_connected_galaxy(x,y,c):
+        bb.try_to_connect_galaxy(x,y,c)
+      if not bb.is_connected_galaxy(x,y,c):
+        #print(f'phase_4: trying to connect () {x,y,c =}')
+        bb.try_to_connect_galaxy(x,y,c, try_hard=True)
+      else:
+        bb.solve()
+      if bb.is_solved():
+        possible_solutions.add(bb)
+    if len(possible_solutions) == 1:
+      bb = possible_solutions.pop()
+      self.board = bb.board
+    elif len(possible_solutions) > 1:
+      raise ValueError(f'More than one possible solutions: {len(possible_solutions)}')
+    else: # len(possible_solutions) == 0
+      self.unsolvable = True
+
+
+  def get_least_possibilities_position(self):
+    # gives back the first position on the board which has less than 3 possible
+    # centers (or the minimal if it's more than 2)
+    min = 999_999
+    ret = None
+    for i in range(self.board_size):
+      for j in range(self.board_size):
+        if self.board[i][j] != None:
+          continue
+        reachable_and_possible = self.get_reachable_and_possible_centers(j,i)
+        if len(reachable_and_possible) < min:
+          min = len(reachable_and_possible)
+          ret = (j, i, reachable_and_possible)
+          if min < 3:
+            return ret
+
+    if ret == None:
+      self.show()
+      print(f'')
+      raise ValueError
+    return ret
+
 
   def get_neighbors(self,x,y):
     neighbors=set()
@@ -119,22 +192,28 @@ class galaxy_field:
     return neighbors
 
   def is_connected_galaxy(self, x,y,c, already_checked=set()):
+    # checks if the x,y point is connected to the galaxy center
+    if self.board[y][x] != None and self.board[y][x] != c:
+      return False
     if self.get_center_in_touch(x,y) == c:
       return True
     neighbors = self.get_neighbors(x,y)
     already_checked_new = already_checked | { (x,y) } | neighbors
     for xx, yy in neighbors:
-      if (xx,yy) not in already_checked and self.board[yy][xx] == self.board[y][x]:
+      #if (xx,yy) not in already_checked and self.board[yy][xx] == self.board[y][x]:
+      if (xx,yy) not in already_checked and self.board[yy][xx] == c:
         if self.is_connected_galaxy(xx,yy,c, already_checked = already_checked_new):
           return True
     return False
 
   def try_to_connect_galaxy(self, x,y,c, try_hard=False):
-    neighbors = self.get_neighbors(x,y)
+    # tries to connect separated galaxy part on x,y to the center (c), you have to
+    # be sure they are separated, it's not checked here
+    # try_hard: in case the center is reachable on multiple pathes
     good_neighbors = set()
     any_change = False
-    for xx, yy in neighbors:
-      if self.board[yy][xx] == None and c in self.get_reachable_centers(xx,yy):
+    for xx, yy in self.get_neighbors(x,y):
+      if self.board[yy][xx] == None and c in self.get_reachable_and_possible_centers(xx,yy):
         good_neighbors.add((xx,yy))
     if len(good_neighbors) == 1:
       self.difficulty += 100
@@ -151,17 +230,32 @@ class galaxy_field:
         bb.mark_point_and_mirror_point(xx,yy,c)
         bb.solve()
         if bb.is_solved():
-          possible_solutions.add((xx,yy))
+          possible_solutions.add(bb)
+
       if len(possible_solutions) > 0:
-        xx, yy = possible_solutions.pop()
-        self.mark_point_and_mirror_point(xx,yy,c)
-        self.solve()
+        bb = possible_solutions.pop()
+        self.board = bb.board
+        if len(possible_solutions) > 0:
+          # It is possible to reach the center on different pathes which looks
+          # like different solutions at this point, but the may give the same
+          # result. Let's check it out
+          for bbb in possible_solutions:
+            if bbb.board != bb.board:
+              raise ValueError(f'More than one possible solutions: {len(possible_solutions)}')
+      else: # len(possible_solutions) == 0
+        self.unsolvable = True
+
     return any_change
 
   def mark_point_and_mirror_point(self, x,y, c):
     self.board[y][x] = c
     mx, my = self.get_mirror_point(x,y, c[0], c[1])
-    self.board[my][mx] = c
+    try:
+      self.board[my][mx] = c
+    except:
+      self.show()
+      print(f'{x = }   {y = }   {mx = }   {my = }   {c = }')
+      raise
 
   def is_on_board(self, x, y):
     if x < 0 or x >= self.board_size or y < 0 or y >= self.board_size:
@@ -189,9 +283,8 @@ class galaxy_field:
     neighbors = self.get_neighbors(x,y)
     already_checked_new = already_checked | { (x,y) } | neighbors
     for xx, yy in neighbors:
-      if (xx,yy) in already_checked:
-         continue
-      reachable = reachable | self.get_reachable_centers(xx, yy, already_checked = already_checked_new)
+      if (xx,yy) not in already_checked:
+        reachable = reachable | self.get_reachable_centers(xx, yy, already_checked = already_checked_new)
     return reachable
 
   def get_mirror_point(self, x,y, cx, cy):
@@ -204,6 +297,11 @@ class galaxy_field:
       if self.is_on_board(mx,my) and self.board[my][mx] == None:
         possible.add((cx,cy))
     return possible
+
+  def get_reachable_and_possible_centers(self,x,y):
+    reachable = self.get_reachable_centers(x,y)
+    possible = self.get_possible_centers(x,y)
+    return reachable & possible
 
   def is_center(self, x, y):
     if (x,y) in self.centers:
@@ -266,87 +364,45 @@ class galaxy_field:
     print()
 #    print(self.board)
 
+if __name__ == "__main__":
+
+    # 5x5 normal, ID = 1_758_394
+    #b = galaxy_field(5,[(0.5,0), (3.5,0), (2.5,1), (0.5, 2.5), (4, 2.5), (2,3), (3,3.5)])
+
+    # 7x7 hard, ID = 3_240_019
+    #b = galaxy_field(7, [(1.5,0), (4,0), (0,1), (2.5, 1.5), (5,2.5), (3.5, 3.5), (6, 3.5), (1.5, 4.5), (0, 5.5), (1,6), (4.5,6)])
+
+    # 7x7 hard, ID = 2_243_248
+    #b = galaxy_field(7, [(2,0), (4,0.5), (0,1), (5.5,1.5), (2.5,2), (2.5,3), (2.5,4), (6,4), (0,4.5), (1,5), (5,5), (6,5.5), (2.5,6)])
+
+    # 10x10 hard, ID = 2_851_686
+    #b = galaxy_field(10, [(5,0.5), (3.5,1), (7,1), (0,1.5), (1.5,2.5), (4,2.5), (7.5,3), (9,3), (0,4), (5,4), (3,5), (8,5), (0.5,7), (4,7), (7,7), (2,7.5), (6,8), (8.5,8), (4,8.5), (0.5,9), (3,9)])
+
+    # 7x7 hard, ID = 381_831
+    #b = galaxy_field(7, [(1.5,0.5), (4.5,0.5), (6,0.5), (1,2), (3,2.5), (0,3), (5,3), (1,3.5), (4,4), (0.5,5), (3,5), (5,5), (0,6), (5.5,6)])
 
 
-# 5x5 normal, ID = 1_758_394
-#b = galaxy_field(5,[(0.5,0), (3.5,0), (2.5,1), (0.5, 2.5), (4, 2.5), (2,3), (3,3.5)])
+    # 10x10 hard, ID = 9_710_141
+    #b = galaxy_field(10,[(0.5,0.5),(6,0.5), (9,1), (4,2), (7.5,2), (0.5,2.5), (2.5,3), (8,3), (2,4), (8.5,4), (5,5), (8,5.5), (0.5,6), (5.5,6), (2.5,6.5), (9,7), (6,7.5), (1,8), (0,9), (3,9), (8,9) ])
 
-# 7x7 hard, ID = 3_240_019
-#b = galaxy_field(7, [(1.5,0), (4,0), (0,1), (2.5, 1.5), (5,2.5), (3.5, 3.5), (6, 3.5), (1.5, 4.5), (0, 5.5), (1,6), (4.5,6)])
-
-# 7x7 hard, ID = 2_243_248
-#b = galaxy_field(7, [(2,0), (4,0.5), (0,1), (5.5,1.5), (2.5,2), (2.5,3), (2.5,4), (6,4), (0,4.5), (1,5), (5,5), (6,5.5), (2.5,6)])
-
-# 7x7 hard, ID = 381_831
-b = galaxy_field(7, [(1.5,0.5), (4.5,0.5), (6,0.5), (1,2), (3,2.5), (0,3), (5,3), (1,3.5), (4,4), (0.5,5), (3,5), (5,5), (0,6), (5.5,6)])
-
-# 10x10 hard, ID = 2_851_686
-#b = galaxy_field(10, [(5,0.5), (3.5,1), (7,1), (0,1.5), (1.5,2.5), (4,2.5), (7.5,3), (9,3), (0,4), (5,4), (3,5), (8,5), (0.5,7), (4,7), (7,7), (2,7.5), (6,8), (8.5,8), (4,8.5), (0.5,9), (3,9)])
-
-# 15x15 hard, ID: 8_351_812
-b = galaxy_field(15, [
-(0.5,0),
-(5,0),
-(12,0),
-(9,0.5),
-(14,0.5),
-(2.5,1),
-(7,1),
-(11,1),
-(5.5,1.5),
-(4,2),
-(12,2),
-(7.5,2.5),
-(7,4),
-(9.5,4),
-(12,4.5),
-(0.5,5),
-(4,5),
-(5.5,5.5),
-(7.5,5.5),
-(14,5.5),
-(3.5,6),
-(10,6),
-(14,7),
-(2.5,7.5),
-(8.5,7.5),
-(10.5,7.5),
-(2,9),
-(7,9),
-(13.5,9),
-(6,9.5),
-(1,10),
-(12,10),
-(3.5,10.5),
-(14,11),
-(7.5,11.5),
-(9,11.5),
-(11.5,11.5),
-(10,12),
-(13,12),
-(0.5,12.5),
-(4.5,12.5),
-(2,13.5),
-(8,13.5),
-(10.5,13.5),
-(13,13.5),
-(5.5,14)
-])
-
-b = galaxy_field(10, [(5,0.5), (3.5,1), (7,1), (0,1.5), (1.5,2.5), (4,2.5), (7.5,3), (9,3), (0,4), (5,4), (3,5), (8,5), (0.5,7), (4,7), (7,7), (2,7.5), (6,8), (8.5,8), (4,8.5), (0.5,9), (3,9)])
-
-print('initial board:')
-b.show(showgrid=True, showborder=False)
-
-b.solve()
-
-if b.is_solved():
-  print('Board solved:')
-  b.show(showgrid=False, showborder=True, showunknown=True)
-else:
-  print('Solving failed:')
-  b.show(showgrid=True, showborder=False)
+    # 15x15 hard, ID: 8_351_812
+    b = galaxy_field(15, [(0.5,0), (5,0), (12,0), (9,0.5), (14,0.5), (2.5,1), (7,1), (11,1), (5.5,1.5), (4,2),  (12,2), (7.5,2.5), (7,4), (9.5,4), (12,4.5), (0.5,5), (4,5), (5.5,5.5), (7.5,5.5), (13,5.5), (3.5,6), (10,6), (14,7), (2.5,7.5), (8.5,7.5), (10.5,7.5), (2,9), (7,9), (13.5,9), (6,9.5), (1,10), (12,10), (3.5,10.5), (14,11), (7.5,11.5), (9,11.5), (11.5,11.5), (10,12), (13,12), (0.5,12.5), (4.5,12.5), (2,13.5), (8,13.5), (10.5,13.5), (13,13.5), (5.5,14) ])
 
 
-print(f'{b.difficulty = }')
+    # Wrong:
+    # b = galaxy_field(7, [(1.5,0), (4,0), (0,1), (2.5, 1.5), (5,2.5), (3.5, 3.5), (6, 3.5), (1.5, 4.5), (0, 5.5), (1,6)])
 
+    print('initial board:')
+    b.show(showgrid=True, showborder=False)
+    b.solve(level=999)
+
+    if b.is_solved():
+      print('Board solved:')
+      b.show(showgrid=False, showborder=True, showunknown=True)
+    else:
+      print('Solving failed:')
+      print(f'{b.unsolvable = }')
+      b.show(showgrid=True, showborder=False)
+
+
+    print(f'{b.difficulty = }')
