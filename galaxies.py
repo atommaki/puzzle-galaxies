@@ -346,11 +346,62 @@ class galaxy_field:
           sign = '  '
           if showgrid or showborder and (self.is_horizontal_border(j/2,i/2) or self.is_vertical_border(j/2,i/2)):
               if i/2 != i//2 and j/2 != j//2:
-                sign = '+ '
+                if j/2 == -0.5 and i/2 == -0.5:
+                    sign = '┌─'
+                elif j/2 == self.board_size-0.5 and i/2 == self.board_size-0.5:
+                    sign = '┘ '
+                elif j/2 == -0.5 and i/2 == self.board_size-0.5:
+                    sign = '└─'
+                elif j/2 == self.board_size-0.5 and i/2 == -0.5:
+                    sign = '┐ '
+                elif j/2 == -0.5:
+                    if showgrid or self.is_horizontal_border(j/2+0.5,i/2):
+                        sign = '├─'
+                    else:
+                        sign = '│ '
+                elif i/2 == -0.5:
+                    if showgrid or self.is_vertical_border(j/2,i/2+0.5):
+                        sign = '┬─'
+                    else:
+                        sign = '──'
+                elif j/2 == self.board_size-0.5:
+                    if showgrid or self.is_horizontal_border(j/2-0.5,i/2):
+                        sign = '┤ '
+                    else:
+                        sign = '│ '
+                elif i/2 == self.board_size-0.5:
+                    if showgrid or self.is_vertical_border(j/2,i/2-0.5):
+                        sign = '┴─'
+                    else:
+                        sign = '──'
+                elif showgrid:
+                    sign = '┼─'
+                elif not self.is_horizontal_border(j/2-0.5,i/2) and not self.is_vertical_border(j/2,i/2-0.5):
+                    sign = '┌─'
+                elif not self.is_horizontal_border(j/2+0.5,i/2) and not self.is_vertical_border(j/2,i/2+0.5):
+                    sign = '┘ '
+                elif not self.is_horizontal_border(j/2-0.5,i/2) and not self.is_vertical_border(j/2,i/2+0.5):
+                    sign = '└─'
+                elif not self.is_horizontal_border(j/2+0.5,i/2) and not self.is_vertical_border(j/2,i/2-0.5):
+                    sign = '┐ '
+                elif not self.is_horizontal_border(j/2-0.5,i/2) and not self.is_horizontal_border(j/2+0.5,i/2):
+                    sign = '│ '
+                elif not self.is_vertical_border(j/2,i/2-0.5) and not self.is_vertical_border(j/2,i/2+0.5):
+                    sign = '──'
+                elif not self.is_horizontal_border(j/2-0.5,i/2):
+                    sign = '├─'
+                elif not self.is_horizontal_border(j/2+0.5,i/2):
+                    sign = '┤ '
+                elif not self.is_vertical_border(j/2,i/2-0.5):
+                    sign = '┬─'
+                elif not self.is_vertical_border(j/2,i/2+0.5):
+                    sign = '┴─'
+                else:
+                    sign = '┼─'
               elif i/2 != i//2:
-                sign = '- '
+                sign = '──'
               elif j/2 != j//2 and (showgrid or showborder and self.is_vertical_border(j/2,i/2)):
-                sign = '| '
+                sign = '│ '
 
           if i/2 == i//2 and j/2 == j//2:
             if not showborder and j//2 < self.board_size and i//2 < self.board_size and i >= 0 and j >=0 and self.board[i//2][j//2] != None:
