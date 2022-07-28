@@ -48,6 +48,6 @@ And this is the (only possible) solution:
 
 # Galaxy puzzle solver
 
-This python script solves these kind of puzzles. As far as I can tell it can solve any puzzles from the puzzle-galaxies.com site, but I can't be 100% sure. Becuase of the puzzles you can find on the site my scipt always assumes the puzzle has one and only one solution (it raises an exception if it detects multiple possible soulutions)
+This python script solves these kind of puzzles. As far as I can tell it can solve any puzzles from the puzzle-galaxies.com site, but I can't be 100% sure. Becuase of the puzzles you can find on the site my script always assumes the puzzle has one and only one solution (it raises an exception if it detects multiple possible soulutions)
 
 
