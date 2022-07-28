@@ -27,14 +27,14 @@ class galaxy_field:
     self.board_size = n
     if board == None:
         self.board = []
+        for i in range(n):
+          self.board.append([])
+          for j in range(n):
+            self.board[i].append(None)
     else:
         self.board = copy.deepcopy(board)
     self.difficulty = 0
     self.nsolutions = None
-    for i in range(n):
-      self.board.append([])
-      for j in range(n):
-        self.board[i].append(None)
     self.sanity_check()
     self.unsolvable = False
 
@@ -71,7 +71,7 @@ class galaxy_field:
     if self.unsolvable: return False
     if level == 3: return self.is_solved()
 
-#    self.solve_phase_3(try_hard=True)
+    self.solve_phase_3(try_hard=True)
 
     if self.is_solved(): return True
     if self.unsolvable: return False
@@ -155,6 +155,8 @@ class galaxy_field:
       bb = possible_solutions.pop()
       self.board = bb.board
     elif len(possible_solutions) > 1:
+      for bb in possible_solutions:
+        bb.show(showgrid=False, showborder=True)
       raise ValueError(f'More than one possible solutions: {len(possible_solutions)}')
     else: # len(possible_solutions) == 0
       self.unsolvable = True
@@ -239,9 +241,17 @@ class galaxy_field:
           # It is possible to reach the center on different pathes which looks
           # like different solutions at this point, but the may give the same
           # result. Let's check it out
+          wrong = False
           for bbb in possible_solutions:
             if bbb.board != bb.board:
-              raise ValueError(f'More than one possible solutions: {len(possible_solutions)}')
+              print(f'{bb.board  = }')
+              print(f'{bbb.board = }')
+              wrong = True
+          if wrong:
+            for bbb in possible_solutions:
+              bbb.show(showgrid=False, showborder=True)
+            print(f'{x, y, c = }')
+            raise ValueError(f'More than one possible solutions: {len(possible_solutions)}')
       else: # len(possible_solutions) == 0
         self.unsolvable = True
 
