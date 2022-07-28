@@ -71,8 +71,6 @@ class galaxy_field:
     if self.unsolvable: return False
     if level == 3: return self.is_solved()
 
-    self.solve_phase_3(try_hard=True)
-
     if self.is_solved(): return True
     if self.unsolvable: return False
 
@@ -283,6 +281,11 @@ class galaxy_field:
     for i in range(self.board_size):
       for j in range(self.board_size):
         if self.board[i][j] == None:
+          return False
+    for i in range(self.board_size):
+      for j in range(self.board_size):
+         if not self.is_connected_galaxy(j,i,self.board[i][j]):
+          self.unsolvable = True
           return False
     return True
 
